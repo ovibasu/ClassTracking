@@ -1,0 +1,242 @@
+﻿@page "/classList"
+@using ClassTracking.Shared.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@attribute [Authorize(Roles = "Admin")]
+@using Blazored.Toast.Configuration
+@inject IClassService ClassService
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject IToastService ToastService
+
+
+<h3 style="margin-top: -14px;">Add / Edit Class: </h3>
+<hr />
+
+<MudCard>
+    <EditForm Model="@cls">
+        <DataAnnotationsValidator />
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group" style="padding-left: 10px;">
+                    <label for="Name" class="control-label">Class Name:<span style="color:red;">*</span></label>
+                    <input for="Name" class="form-control" @bind="@cls.Name" />
+                    &nbsp;<ValidationMessage For="@(() => cls.Name)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="Standard" class="control-label">Standard:<span style="color:red;">*</span></label>
+                    <input for="Standard" class="form-control" @bind="@cls.Standard" />
+                    &nbsp;<ValidationMessage For="@(() => cls.Standard)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="MaxStudent" class="control-label">MaxStudent:<span style="color:red;">*</span></label>
+                    <input for="MaxStudent" class="form-control" @bind="@cls.MaxStudent" />
+                    &nbsp;<ValidationMessage For="@(() => cls.MaxStudent)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="SessionYear" class="control-label">Session / Year:<span style="color:red;">*</span></label>
+                    <input for="SessionYear" class="form-control" @bind="@cls.SessionYear" />
+                    &nbsp;<ValidationMessage For="@(() => cls.SessionYear)" />
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            @if (Id == 0)
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@CreateClass" value="Create" style="margin-left: 10px; margin-top: -24px;" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@UpdateClass" value="Update" style="margin-left: 10px; margin-top: -24px;" />
+                    </div>
+                </div>
+            }
+        </div>
+    </EditForm>
+</MudCard>
+
+@if (classes == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <MudTable Items="@classes" Class="mt-5"
+              Dense="@true" Hover="@true" Bordered="@true" Striped="@true"
+              Filter="new Func<Class,bool>(FilterFunc1)"
+              @bind-SelectedItem="selectedItem1">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Class List:<hr /> </MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString1" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Standard</MudTh>
+            <MudTh>Max Student</MudTh>
+            <MudTh>Session / Year</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Standard">@context.Standard</MudTd>
+            <MudTd DataLabel="Max Student">@context.MaxStudent</MudTd>
+            <MudTd DataLabel="Session / Year">@context.SessionYear</MudTd>
+            <MudTd DataLabel="Action">
+                <button type="button" class="btn btn-link" @onclick="() => EditClass(context.ClassId)">
+                    <i class="oi oi-pencil" />
+                </button>
+                <button type="button" class="btn btn-link" @onclick="() => DeleteClass(context.ClassId)">
+                    <i class="oi oi-trash" />
+                </button>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 20}" RowsPerPageString="Rows Per Page:"></MudTablePager>
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    public int Id { get; set; } = 0;
+    private IEnumerable<Class> classes { get; set; } = new List<Class>();
+    public Class cls { get; set; } = new Class();
+    private string searchString1 = "";
+    private Class selectedItem1 = null;
+    private HashSet<Class> selectedItems = new HashSet<Class>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected async Task LoadData()
+    {
+        classes = await ClassService.GetClasses();
+    }
+
+    protected async Task CreateClass()
+    {
+        if (cls.Name == null || cls.Name == string.Empty)
+        {
+            ToastService.ShowWarning("Class Name is Required?");
+        }
+        if (cls.Standard == null || cls.Standard == string.Empty)
+        {
+            ToastService.ShowWarning("Class Standard is Required?");
+        }
+        if (cls.MaxStudent == 0)
+        {
+            ToastService.ShowWarning("Max Student no is Required?");
+        }
+        if (cls.SessionYear == 0)
+        {
+            ToastService.ShowWarning("Session year is Required?");
+        }
+        else
+        {
+            await ClassService.PostClass(cls);
+            Clear();
+            await LoadData();
+            ToastService.ShowSuccess("Created Successfully.");
+        }
+    }
+
+    protected async Task EditClass(int classId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to edit this?");
+        if (confirmed)
+        {
+            cls = await ClassService.GetClass(classId);
+            Id = cls.ClassId;
+        }
+    }
+
+    protected async Task DeleteClass(int classId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to delete this?");
+        if (confirmed)
+        {
+            await ClassService.DeleteClass(classId);
+            await LoadData();
+            ToastService.ShowSuccess("Deleted Successfully.");
+        }
+    }
+
+    protected async Task UpdateClass()
+    {
+        if (cls.Name == string.Empty)
+        {
+            ToastService.ShowWarning("Class Name is Required?");
+        }
+        if (cls.Standard == string.Empty)
+        {
+            ToastService.ShowWarning("Class Standard is Required?");
+        }
+        if (cls.MaxStudent == 0)
+        {
+            ToastService.ShowWarning("Max Student no is Required?");
+        }
+        if (cls.SessionYear == 0)
+        {
+            ToastService.ShowWarning("Session year is Required?");
+        }
+        else
+        {
+            await ClassService.PutClass(Id, cls);
+            Clear();
+            await LoadData();
+            ToastService.ShowSuccess("Updated Successfully.");
+        }
+    }
+
+    private bool FilterFunc1(Class cls) => FilterFunc(cls, searchString1);
+
+    private bool FilterFunc(Class cls, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (cls.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{cls.ClassId}".Contains(searchString))
+            return true;
+        if (cls.Standard.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{cls.MaxStudent}".Contains(searchString))
+            return true;
+        if ($"{cls.SessionYear}".Contains(searchString))
+            return true;
+        return false;
+    }
+
+    void Clear()
+    {
+        Id = 0;
+        cls.ClassId = 0;
+        cls.Name = "";
+        cls.Standard = "";
+        cls.MaxStudent = 0;
+        cls.SessionYear = 0;
+    }
+}
+
+<BlazoredToasts Position="ToastPosition.TopRight"
+                Timeout="5"
+                IconType="IconType.FontAwesome"
+                SuccessClass="success-toast-override"
+                SuccessIcon="fa fa-thumbs-up"
+                ErrorIcon="fa fa-bug" />

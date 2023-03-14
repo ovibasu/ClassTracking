@@ -1,0 +1,199 @@
+﻿@page "/classTrackingList"
+@using ClassTracking.Shared.Models
+@using ClassTracking.Shared.ViewModels
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+@using MudBlazor
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@attribute [Authorize(Roles = "Admin")]
+@using Blazored.Toast.Configuration
+@inject IEnrollStudentService EnrollStudentService
+@inject IAssignTeacherService AssignTeacherService
+@inject ITeacherService TeacherService
+@inject IClassService ClassService
+@inject IStudentService StudentService
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject IToastService ToastService
+
+<h3 style="margin-top: -14px;">Class Tracking: </h3>
+<hr />
+
+@if (Id != 0) 
+{ 
+    <MudCard>
+        <div class="row">
+            <table class="table" id="viewClass" style="width:97%;margin-left: 17px;">
+                <thead>
+                    <tr>
+                        <th>Class Name</th>
+                        <th>Standard</th>
+                        <th>Total Student</th>
+                        <th>Max Student</th>
+                        <th>Session / Year</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>@viewClass.Name</td>
+                        <td>@viewClass.Standard</td>
+                        <td>@viewClass.TotalStudent</td>
+                        <td>@viewClass.MaxStudent</td>
+                        <td>@viewClass.SessionYear</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="row">
+            <table class="table" id="viewTeacher" style="width:97%;margin-left: 17px;">
+                <thead>
+                    <tr>
+                        <th>Teacher Name</th>
+                        <th>Designation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>@viewTeacher.Name</td>
+                        <td>@viewTeacher.Designation</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="row">
+            <table class="table" id="students" style="width:97%;margin-left: 17px;">
+                <thead>
+                    <tr>
+                        <th>Student Name</th>
+                        <th>Father Name</th>
+                        <th>Mother Name</th>
+                        <th>Nationality</th>
+                        <th>Enroll Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var student in students)
+                    {
+                        <tr>
+                            <td>@student.Name</td>
+                            <td>@student.FatherName</td>
+                            <td>@student.MotherName</td>
+                            <td>@student.Nationality</td>
+                            <td>@student.EnrollDate.ToString("dd-MM-yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </MudCard>
+}
+
+@if (classes == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <MudTable Items="@classes" Class="mt-5"
+              Dense="@true" Hover="@true" Bordered="@true" Striped="@true"
+              Filter="new Func<Class,bool>(FilterFunc1)"
+              @bind-SelectedItem="selectedItem1">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Class List:<hr /> </MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString1" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Standard</MudTh>
+            <MudTh>Max Student</MudTh>
+            <MudTh>Session / Year</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Standard">@context.Standard</MudTd>
+            <MudTd DataLabel="Max Student">@context.MaxStudent</MudTd>
+            <MudTd DataLabel="Session / Year">@context.SessionYear</MudTd>
+            <MudTd DataLabel="Action">
+                <button type="button" class="btn btn-link" @onclick="() => ViewClass(context.ClassId)">
+                    <i class="oi oi-eye" />
+                </button>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 20}" RowsPerPageString="Rows Per Page:"></MudTablePager>
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    public int Id { get; set; } = 0;
+    private IEnumerable<AssignTeacher> assignTeachers { get; set; } = new List<AssignTeacher>();
+    private IEnumerable<Teacher> teachers { get; set; } = new List<Teacher>();
+    private IEnumerable<ViewStudent> students { get; set; } = new List<ViewStudent>();
+    private IEnumerable<Class> classes { get; set; } = new List<Class>();
+    public ViewTeacher viewTeacher { get; set; } = new ViewTeacher();
+    public ViewClass viewClass { get; set; } = new ViewClass();
+    public ViewStudent viewStudent { get; set; } = new ViewStudent();
+    public Class cls { get; set; } = new Class();
+    private string searchString1 = "";
+    private Class selectedItem1 = null;
+    private HashSet<Class> selectedItems = new HashSet<Class>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected async Task LoadData()
+    {
+        classes = await ClassService.GetClasses();
+    }
+
+    protected async Task ViewClass(int classId)
+    {
+        Clear();
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to preview this?");
+        if (confirmed)
+        {
+            viewClass = await ClassService.GetClassInfo(classId);
+            viewTeacher = await AssignTeacherService.GetTeacherInfo(classId);
+            students = await EnrollStudentService.GetStudentInfo(classId);
+            Id = viewClass.ClassId;
+        }
+    }
+
+    private bool FilterFunc1(Class cls) => FilterFunc(cls, searchString1);
+
+    private bool FilterFunc(Class cls, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (cls.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{cls.ClassId}".Contains(searchString))
+            return true;
+        if (cls.Standard.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{cls.MaxStudent}".Contains(searchString))
+            return true;
+        if ($"{cls.SessionYear}".Contains(searchString))
+            return true;
+        return false;
+    }
+
+    void Clear()
+    {
+        Id = 0;
+    }
+}
+
+<BlazoredToasts Position="ToastPosition.TopRight"
+                Timeout="5"
+                IconType="IconType.FontAwesome"
+                SuccessClass="success-toast-override"
+                SuccessIcon="fa fa-thumbs-up"
+                ErrorIcon="fa fa-bug" />

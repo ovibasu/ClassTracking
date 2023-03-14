@@ -1,0 +1,264 @@
+﻿@page "/studentList"
+@using ClassTracking.Shared.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@attribute [Authorize(Roles = "Admin")]
+@using MudBlazor
+@using System.Globalization
+@using Blazored.Toast.Configuration
+@inject IStudentService StudentService
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject IToastService ToastService
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IToastService ToastService
+@using System.Net.Http.Json
+
+
+<h3 style="margin-top: -14px;">Add / Edit Student: </h3>
+<hr />
+
+<MudCard>
+    <EditForm Model="@student">
+        <DataAnnotationsValidator />
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group" style="padding-left: 10px;">
+                    <label for="Name" class="control-label">Student Name:<span style="color:red;">*</span></label>
+                    <input for="Name" class="form-control" @bind="@student.Name" />
+                    &nbsp;<ValidationMessage For="@(() => student.Name)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="FatherName" class="control-label">Father Name:<span style="color:red;">*</span></label>
+                    <input for="FatherName" class="form-control" @bind="@student.FatherName" />
+                    &nbsp;<ValidationMessage For="@(() => student.FatherName)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="MotherName" class="control-label">Mother Name:<span style="color:red;">*</span></label>
+                    <input for="MotherName" class="form-control" @bind="@student.MotherName" />
+                    &nbsp;<ValidationMessage For="@(() => student.MotherName)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="Nationality" class="control-label">Nationality:<span style="color:red;">*</span></label>
+                    <input for="Nationality" class="form-control" @bind="@student.Nationality" />
+                    &nbsp;<ValidationMessage For="@(() => student.Nationality)" />
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group" style="padding-left: 10px;">
+                    <MudDatePicker Label="Enroll Date: " @bind-Date="enrollDate" Culture="@CultureInfo.GetCultureInfo("bn-BD")" TitleDateFormat="dddd, dd MMMM" />
+                </div>
+            </div>
+            @if (Id == 0)
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@CreateStudent" value="Create" style="margin-left: 10px; margin-top: 17px;" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@UpdateStudent" value="Update" style="margin-left: 10px; margin-top: 17px;" />
+                    </div>
+                </div>
+            }
+        </div>
+    </EditForm>
+</MudCard>
+
+@if (students == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <MudTable Items="@students" Class="mt-5"
+              Dense="@true" Hover="@true" Bordered="@true" Striped="@true"
+              Filter="new Func<Student,bool>(FilterFunc1)"
+              @bind-SelectedItem="selectedItem1">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Student List:<hr /> </MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString1" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Father Name</MudTh>
+            <MudTh>Mother Name</MudTh>
+            <MudTh>Nationality</MudTh>
+            <MudTh>Enroll Date</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Father Name">@context.FatherName</MudTd>
+            <MudTd DataLabel="Mother Name">@context.MotherName</MudTd>
+            <MudTd DataLabel="Nationality">@context.Nationality</MudTd>
+            <MudTd DataLabel="Enroll Date">@context.EnrollDate.ToString("dd-MM-yyyy")</MudTd>
+            <MudTd DataLabel="Action">
+                <button type="button" class="btn btn-link" @onclick="() => EditStudent(context.StudentId)">
+                    <i class="oi oi-pencil" />
+                </button>
+                <button type="button" class="btn btn-link" @onclick="() => DeleteStudent(context.StudentId)">
+                    <i class="oi oi-trash" />
+                </button>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 20}" RowsPerPageString="Rows Per Page:"></MudTablePager>
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    public int Id { get; set; } = 0;
+    private IEnumerable<Student> students { get; set; } = new List<Student>();
+    public Student student { get; set; } = new Student();
+    private string searchString1 = "";
+    private Student selectedItem1 = null;
+    private HashSet<Student> selectedItems = new HashSet<Student>();
+    private DateTime? enrollDate = new DateTime();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected async Task LoadData()
+    {
+        enrollDate = DateTime.UtcNow;
+        students = await StudentService.GetStudents();
+    }
+
+    protected async Task CreateStudent()
+    {
+        if (student.Name == null || student.Name == string.Empty)
+        {
+            ToastService.ShowWarning("Student Name is Required?");
+        }
+        if (student.FatherName == null || student.FatherName == string.Empty)
+        {
+            ToastService.ShowWarning("Father Name is Required?");
+        }
+        if (student.MotherName == null || student.MotherName == string.Empty)
+        {
+            ToastService.ShowWarning("Mother Name is Required?");
+        }
+        if (student.Nationality == null || student.Nationality == string.Empty)
+        {
+            ToastService.ShowWarning("Nationality is Required?");
+        }
+        else
+        {
+            student.EnrollDate = Convert.ToDateTime(enrollDate);
+            await StudentService.PostStudent(student);
+            Clear();
+            await LoadData();
+            ToastService.ShowSuccess("Created Successfully.");
+        }
+    }
+
+    protected async Task EditStudent(int studentId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to edit this?");
+        if (confirmed)
+        {
+            student = await StudentService.GetStudent(studentId);
+            Id = student.StudentId;
+            enrollDate = student.EnrollDate;
+        }
+    }
+
+    protected async Task DeleteStudent(int studentId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to delete this?");
+        if (confirmed)
+        {
+            await StudentService.DeleteStudent(studentId);
+            await LoadData();
+            ToastService.ShowSuccess("Deleted Successfully.");
+        }
+    }
+
+    protected async Task UpdateStudent()
+    {
+        if (student.Name == string.Empty)
+        {
+            ToastService.ShowWarning("Student Name is Required?");
+        }
+        if (student.FatherName == string.Empty)
+        {
+            ToastService.ShowWarning("Father Name is Required?");
+        }
+        if (student.MotherName == string.Empty)
+        {
+            ToastService.ShowWarning("Mother Name is Required?");
+        }
+        if (student.Nationality == string.Empty)
+        {
+            ToastService.ShowWarning("Nationality is Required?");
+        }
+        else
+        {
+            student.EnrollDate = Convert.ToDateTime(enrollDate);
+            await StudentService.PutStudent(Id, student);
+            Clear();
+            await LoadData();
+            ToastService.ShowSuccess("Updated Successfully.");
+        }
+    }
+
+    private bool FilterFunc1(Student student) => FilterFunc(student, searchString1);
+
+    private bool FilterFunc(Student student, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (student.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{student.StudentId}".Contains(searchString))
+            return true;
+        if (student.FatherName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (student.MotherName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (student.Nationality.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{student.EnrollDate}".Contains(searchString))
+            return true;
+        return false;
+    }
+
+    void Clear()
+    {
+        Id = 0;
+        student.StudentId = 0;
+        student.Name = "";
+        student.FatherName = "";
+        student.MotherName = "";
+        student.Nationality = "";
+        student.EnrollDate = DateTime.UtcNow;
+    }
+}
+
+<BlazoredToasts Position="ToastPosition.TopRight"
+                Timeout="5"
+                IconType="IconType.FontAwesome"
+                SuccessClass="success-toast-override"
+                SuccessIcon="fa fa-thumbs-up"
+                ErrorIcon="fa fa-bug" />

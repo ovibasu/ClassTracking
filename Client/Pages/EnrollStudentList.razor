@@ -1,0 +1,254 @@
+﻿@page "/enrollStudentList"
+@using ClassTracking.Shared.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager NavigationManager
+@using MudBlazor
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@attribute [Authorize(Roles = "Admin")]
+@using Blazored.Toast.Configuration
+@inject IEnrollStudentService EnrollStudentService
+@inject IStudentService StudentService
+@inject IClassService ClassService
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+@inject IToastService ToastService
+
+<h3 style="margin-top: -14px;">Add / Edit Enroll Student: </h3>
+<hr />
+
+<MudCard>
+    <EditForm Model="@enrollStudent">
+        <DataAnnotationsValidator />
+        <div class="row">
+            <div class="col-md-3">
+                <div class="form-group" style="padding-left: 10px;">
+                    <label for="StudentId" class="control-label">Student Name:<span style="color:red;">*</span></label>
+                    <RadzenDropDown AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Data=@students @bind-Value=@enrollStudent.StudentId
+                                    Placeholder="--Select Student--" TextProperty="Name" ValueProperty="StudentId" Change=@(args => OnChangeStudent(args, "Filter Student")) Style="padding-top: 7px;" Class="w-100" />
+                    &nbsp;<ValidationMessage For="@(() => enrollStudent.StudentId)" />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="ClassId" class="control-label">Class Name:<span style="color:red;">*</span></label>
+                    <RadzenDropDown AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Data=@classes @bind-Value=@enrollStudent.ClassId
+                                    Placeholder="--Select Student--" TextProperty="Name" ValueProperty="ClassId" Change=@(args => OnChangeClass(args, "Filter Student")) Style="padding-top: 7px;" Class="w-100" />
+                    &nbsp;<ValidationMessage For="@(() => enrollStudent.ClassId)" />
+                </div>
+            </div>
+            @if (Id == 0)
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@Create" value="Create" style="margin-left: 10px; margin-top: 36px;" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <input type="submit" class="btn btn-primary" @onclick="@Update" value="Update" style="margin-left: 10px; margin-top: 36px;" />
+                    </div>
+                </div>
+            }
+        </div>
+    </EditForm>
+</MudCard>
+
+@if (enrollStudents == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <MudTable Items="@enrollStudents" Class="mt-5"
+              Dense="@true" Hover="@true" Bordered="@true" Striped="@true"
+              Filter="new Func<EnrollStudent,bool>(FilterFunc1)"
+              @bind-SelectedItem="selectedItem1">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6">Enroll Student List:<hr /> </MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="searchString1" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Student Name</MudTh>
+            <MudTh>Class Name</MudTh>
+            <MudTh>Action</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Student Name">@context.Student.Name</MudTd>
+            <MudTd DataLabel="Class Name">@context.Class.Name</MudTd>
+            <MudTd DataLabel="Action">
+                <button type="button" class="btn btn-link" @onclick="() => Edit(context.EnrollStudentId)">
+                    <i class="oi oi-pencil" />
+                </button>
+                <button type="button" class="btn btn-link" @onclick="() => Delete(context.EnrollStudentId)">
+                    <i class="oi oi-trash" />
+                </button>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 20}" RowsPerPageString="Rows Per Page:"></MudTablePager>
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    public int Id { get; set; } = 0;
+    private IEnumerable<EnrollStudent> enrollStudents { get; set; } = new List<EnrollStudent>();
+    private IEnumerable<Student> students { get; set; } = new List<Student>();
+    private IEnumerable<Class> classes { get; set; } = new List<Class>();
+    public EnrollStudent enrollStudent { get; set; } = new EnrollStudent();
+    private string searchString1 = "";
+    private EnrollStudent selectedItem1 = null;
+    private HashSet<EnrollStudent> selectedItems = new HashSet<EnrollStudent>();
+    private int count { get; set; }
+    private int countStudent { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    protected async Task LoadData()
+    {
+        enrollStudents = await EnrollStudentService.GetEnrollStudents();
+        students = await StudentService.GetStudents();
+        classes = await ClassService.GetClasses();
+    }
+
+    protected async Task OnChangeStudent(object value, string name)
+    {
+        count = await StudentService.GetEnrollmentCountForStudent(enrollStudent.StudentId);
+        if(count > 0)
+        {
+            ToastService.ShowWarning("Already this student in a Class?");
+        }
+    }
+
+    protected async Task OnChangeClass(object value, string name)
+    {
+        countStudent = await StudentService.GetTotalStudentInClass(enrollStudent.ClassId);
+        if(countStudent >= 60)
+        {
+            ToastService.ShowWarning("Already this class full with students?");
+        }
+    }
+
+    protected async Task Create()
+    {
+        if (enrollStudent.StudentId == 0)
+        {
+            ToastService.ShowWarning("Student Name is Required?");
+        }
+        else if (enrollStudent.ClassId == 0)
+        {
+            ToastService.ShowWarning("Class Name is Required?");
+        }
+        else
+        {
+            count = await StudentService.GetEnrollmentCountForStudent(enrollStudent.StudentId);
+            countStudent = await StudentService.GetTotalStudentInClass(enrollStudent.ClassId);
+            if (count > 0)
+            {
+                ToastService.ShowWarning("Already this student in a Class?");
+            }
+            else if (countStudent >= 60)
+            {
+                ToastService.ShowWarning("Already this class full with students?");
+            }
+            else
+            {
+                await EnrollStudentService.PostEnrollStudent(enrollStudent);
+                Clear();
+                await LoadData();
+                ToastService.ShowSuccess("Created Successfully.");
+            }
+        }
+    }
+
+    protected async Task Edit(int enrollStudentId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to edit this?");
+        if (confirmed)
+        {
+            enrollStudent = await EnrollStudentService.GetEnrollStudent(enrollStudentId);
+            Id = enrollStudent.EnrollStudentId;
+        }
+    }
+
+    protected async Task Delete(int enrollStudentId)
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure to delete this?");
+        if (confirmed)
+        {
+            await EnrollStudentService.DeleteEnrollStudent(enrollStudentId);
+            await LoadData();
+            ToastService.ShowSuccess("Deleted Successfully.");
+        }
+    }
+
+    protected async Task Update()
+    {
+        if (enrollStudent.StudentId == 0)
+        {
+            ToastService.ShowWarning("Student Name is Required?");
+        }
+        else if (enrollStudent.ClassId == 0)
+        {
+            ToastService.ShowWarning("Class Name is Required?");
+        }
+        else
+        {
+            countStudent = await StudentService.GetTotalStudentInClass(enrollStudent.ClassId);
+            if (countStudent >= 60)
+            {
+                ToastService.ShowWarning("Already this class full with students?");
+            }
+            else
+            {
+                await EnrollStudentService.PutEnrollStudent(Id, enrollStudent);
+                Clear();
+                await LoadData();
+                ToastService.ShowSuccess("Updated Successfully.");
+            }
+        }
+    }
+
+    private bool FilterFunc1(EnrollStudent enrollStudent) => FilterFunc(enrollStudent, searchString1);
+
+    private bool FilterFunc(EnrollStudent enrollStudent, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if ($"{enrollStudent.EnrollStudentId}".Contains(searchString))
+            return true;
+        if (enrollStudent.Student.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{enrollStudent.StudentId}".Contains(searchString))
+            return true;
+        if (enrollStudent.Class.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{enrollStudent.ClassId}".Contains(searchString))
+            return true;
+        return false;
+    }
+
+    void Clear()
+    {
+        Id = 0;
+        enrollStudent.EnrollStudentId = 0;
+        enrollStudent.StudentId = 0;
+        enrollStudent.ClassId = 0;
+    }
+}
+
+<BlazoredToasts Position="ToastPosition.TopRight"
+                Timeout="5"
+                IconType="IconType.FontAwesome"
+                SuccessClass="success-toast-override"
+                SuccessIcon="fa fa-thumbs-up"
+                ErrorIcon="fa fa-bug" />

@@ -1,0 +1,15 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@inherits LayoutComponentBase
+@using Blazored.Toast.Configuration
+
+<AuthorizeView>
+    <Authorized>
+        @*<Dashboard />*@
+        <h3>Welcome to Class Tracking.</h3>
+    </Authorized>
+    <NotAuthorized>
+        <h2>Please Log In to Continue!</h2>
+    </NotAuthorized>
+</AuthorizeView>
